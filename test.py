@@ -7,29 +7,22 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QPushButton,
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt
 
-# 🔹 FUNCION PARA MEJORAR DETECCIÓN (Reduce ruido y mejora contraste)
-def denoise_and_preprocess(image):
+#  FUNCION PARA MEJORAR DETECCIÓN (Por pigmentación)
+def preprocess_by_pigmentation(image):
     # Convertir a escala de grises
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Ecualización del histograma para mejorar el contraste
-    gray = cv2.equalizeHist(gray)
-
-    # Aplicar un filtro de mediana para reducir ruido sin perder bordes
-    denoised = cv2.medianBlur(gray, 3)
-
-    # Aplicar umbral adaptativo para segmentar los números
-    thresh = cv2.adaptiveThreshold(denoised, 255,
-                                   cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                   cv2.THRESH_BINARY_INV, 15, 8)
+    # Detectar pigmentación mediante umbral adaptativo
+    pigment_mask = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                          cv2.THRESH_BINARY_INV, 11, 10)
 
     # Operación morfológica para cerrar pequeños huecos en los números
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    processed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    processed = cv2.morphologyEx(pigment_mask, cv2.MORPH_CLOSE, kernel)
 
     return processed
 
-# 🔹 CLASE PRINCIPAL
+#  CLASE PRINCIPAL
 class MathValidator(QWidget):
     def __init__(self):
         super().__init__()
@@ -40,7 +33,7 @@ class MathValidator(QWidget):
         self.templates = self.load_templates('mis_numeros')
         self.init_ui()
 
-    # 🔹 Carga de plantillas de números
+    #  Carga de plantillas de números
     def load_templates(self, template_folder):
         templates = {}
         files = {str(i): f'num_{i}.jpg' for i in range(10)}
@@ -56,7 +49,7 @@ class MathValidator(QWidget):
                 templates[label] = img_bin
         return templates
 
-    # 🔹 Interfaz gráfica
+    #  Interfaz gráfica
     def init_ui(self):
         main_layout = QVBoxLayout()
         btn_layout = QHBoxLayout()
@@ -88,7 +81,7 @@ class MathValidator(QWidget):
         self.btn_load.clicked.connect(self.load_image)
         self.btn_process.clicked.connect(self.process_image)
 
-    # 🔹 Cargar imagen
+    #  Cargar imagen
     def load_image(self):
         path, _ = QFileDialog.getOpenFileName(self, "Abrir Imagen", "", "Imágenes (*.png *.jpg *.jpeg)")
         if path:
@@ -101,11 +94,11 @@ class MathValidator(QWidget):
             self.lbl_result.setText("✅ Imagen cargada.")
             self.lbl_detected.setText("Dígitos detectados: ")
 
-    # 🔹 PREPROCESAMIENTO DE LA IMAGEN (Usa la nueva función)
+    #  PREPROCESAMIENTO DE LA IMAGEN (Usa la nueva función basada en pigmentación)
     def preprocess_image(self, image):
-        return denoise_and_preprocess(image)
+        return preprocess_by_pigmentation(image)
 
-    # 🔹 DETECTAR REGIONES DE LOS NÚMEROS
+    #  DETECTAR REGIONES DE LOS NÚMEROS
     def detect_components(self, processed, min_area=100):
         contours, _ = cv2.findContours(processed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         components = []
@@ -117,7 +110,7 @@ class MathValidator(QWidget):
         components = sorted(components, key=lambda c: (c[1], c[0]))  # Ordenar de izq a der
         return components
 
-    # 🔹 CLASIFICAR DÍGITO DETECTADO
+    #  CLASIFICAR DÍGITO DETECTADO
     def classify_character(self, roi):
         best_label = '?'
         best_score = -1
@@ -135,7 +128,7 @@ class MathValidator(QWidget):
                 best_label = label
         return best_label, best_score
 
-    # 🔹 PROCESAR IMAGEN PARA DETECTAR NÚMEROS
+    #  PROCESAR IMAGEN PARA DETECTAR NÚMEROS
     def process_image(self):
         if self.image is None:
             self.lbl_result.setText("⚠️ ¡Primero carga una imagen!")
@@ -155,10 +148,10 @@ class MathValidator(QWidget):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
         self.display_image(output_image, self.lbl_processed)
-        self.lbl_detected.setText(f"Dígitos detectados: {detected_text}")
+        self.lbl_detected.setText(f"Dígitos detectados: {detected_text.strip() if detected_text.strip() else 'Ninguno detectado'}")
         self.lbl_result.setText("✅ Procesamiento completado.")
 
-    # 🔹 MOSTRAR IMAGEN EN UI
+    #  MOSTRAR IMAGEN EN UI
     def display_image(self, image, label):
         if len(image.shape) == 3:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -175,7 +168,7 @@ class MathValidator(QWidget):
                                                  Qt.TransformationMode.SmoothTransformation)
         label.setPixmap(pixmap)
 
-# 🔹 EJECUCIÓN DE LA APLICACIÓN
+#  EJECUCIÓN DE LA APLICACIÓN
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MathValidator()
